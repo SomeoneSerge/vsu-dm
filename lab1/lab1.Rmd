@@ -1,0 +1,82 @@
+---
+ output:
+     pdf_document:
+         latex_engine: xelatex
+---
+
+# Voronezh SU Datamining course, p. 1
+
+```{r setting-up}
+library(printr)
+library(MASS)
+library(caret)
+library(ROSE)
+library(rpart)
+library(rattle)
+library(Matrix)
+library(xgboost)
+library(tidyverse)
+library(broom)
+```
+
+Getting to know data
+---
+
+```{r data-import}
+revenue <- read_csv('revenue.csv')
+str(revenue)
+```
+
+```{r data-cleaning-1}
+revenue <- revenue %>% mutate(incgt50 = 1*(income=='>50K')) %>% dplyr::select(-income)
+```
+
+Let's assert the balancing in the distribution of labels:
+```{r table-labels}
+table(revenue$incgt50)
+```
+
+Note the classes aren't really well balanced,
+but not that we need to take an action about that.
+
+Linear model
+---
+
+Now we'll take a look at linear model:
+
+```{r design-matrix}
+X <- model.matrix(~., revenue) %>% data.frame
+```
+
+```{r linear-model}
+lmrev <- glm(incgt50~., data=X)
+glance(lmrev)
+tidy(lmrev) %>% dplyr::filter(p.value < .1)
+```
+
+Decision trees
+---
+
+Now that we want to build a more adequate predictor,
+we'll need some validation means:
+```{r evalset}
+intr <- createDataPartition(X$incgt50, p=.75, list=FALSE)
+Xtr <- X[intr,]
+Xte <- X[-intr,]
+```
+
+
+```{r rpart}
+trees <- 2:6 %>% map(~rpart(
+                            incgt50~.,
+                            data=Xtr,
+                            method='class',
+                            parms=list(
+                                split='gini'),
+                            control=rpart.control(maxdepth=.x)))
+trees %>% walk(~print(fancyRpartPlot(.x)))
+trees %>% map(~predict(.x, newdata=Xtr)) %>%
+    map(~head(.x))
+    map(~errorMatrix(.x, Xtr$incgt50)) %>%
+    walk(print(.x))
+```
