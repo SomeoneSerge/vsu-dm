@@ -45,9 +45,9 @@ def my_objective(y, y_pred, s_pred, alpha=.6):
     
     invcoef = Variable(torch.cumsum(torch.ones(*y.data.shape), dim=0))
     
-    pos = F.sigmoid(y)
-    neg = F.sigmoid(-y)
-    ZERO = Variable(torch.Tensor([1e-16]))
+    pos = F.tanh(y)
+    neg = F.tanh(-y)
+    ZERO = Variable(torch.Tensor([1e-14]))
     fee = (
         neg * torch.log(torch.max(s_pred[:, 0], ZERO))
         + pos * torch.log(torch.max(s_pred[:, 1], ZERO))
