@@ -40,13 +40,13 @@ def build_corpus(df, wnd_in, wnd_out):
     y = y.fillna(0)
     return X, y
 
-def my_objective(y, y_pred, s_pred, alpha=.6):
+def my_objective(y, y_pred, s_pred, alpha=.8):
     n = sum(y.data.shape)
     
     invcoef = Variable(torch.cumsum(torch.ones(*y.data.shape), dim=0))
     
-    pos = F.tanh(y)
-    neg = F.tanh(-y)
+    pos = F.tanh(F.relu(y))
+    neg = F.tanh(F.relu(-y))
     ZERO = Variable(torch.Tensor([1e-14]))
     fee = (
         neg * torch.log(torch.max(s_pred[:, 0], ZERO))
@@ -87,11 +87,23 @@ def loss(model, X, y,
             L = 0
     mean_L = mean_L/X.shape[0]
     return mean_L[0]
-        
+
+def chunk_iterator(X, y):
+    index = X.index
+    X = torch.Tensor(X.as_matrix())
+    Y = torch.Tensor(y.as_matrix())
+    for i in range(X.shape[0]):
+        x = Variable(X[i, :])
+        y = Variable(Y[i, :], requires_grad=True)
+        yield x, y
+
+def np_sigmoid(z):
+    return 1./(1. + np.exp(z))
+
 def predictions(model, X, columns):
     mem = model.init_mem()
-    pred = torch.zeros(X.shape[0], model.days_out)
-    sign = torch.zeros(X.shape[0], model.days_out, 2)
+    pred = torch.zeros(X.shape[0], len(columns))
+    sign = torch.zeros(X.shape[0], len(columns), 2)
     index = X.index
     X = torch.Tensor(X.as_matrix())
     for i in range(X.shape[0]):
@@ -118,9 +130,12 @@ def evaluate_model(model,
                    include_pclose=True,
                    include_tlohi=False,
                    include_plohi=True,
+                   include_average=True,
+                   wnd_out=4,
                    title='Model evaluation'):
     W=1
     pred, sign = predictions(model, X, y.columns)
+    sign = sign.numpy()
     opens = base_price + X.iloc[:, 0].cumsum()
     truth = opens + y.iloc[:, 0]
     pred_close = opens + pred.Close1
@@ -175,4 +190,9 @@ def evaluate_model(model,
                  fill_color='blue', line_color='lightgray',
                  line_width=2, radius=.25*W,
                  legend='Predicted decrease')
+    if include_average:
+        p.segment(x0=X.index, y0=opens,
+                  x1=[wnd_out+i for i in X.index], y1=opens+pred.sum(axis=1)/3,
+                  line_color='green', line_width=6, alpha=.25,
+                  legend='Predicted {}-day average'.format(wnd_out))
     bk.show(p)
